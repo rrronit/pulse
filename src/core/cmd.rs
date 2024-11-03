@@ -16,7 +16,7 @@ impl Commands {
 
     pub async fn handle_get_command(&self, db: Arc<RwLock<DB>>) -> Option<String> {
         // Acquire a read lock on the database
-        let db = db.read().await;
+        let mut db = db.write().await;
         let value = db.get(&self.args[0]);
 
         match value {
@@ -25,9 +25,29 @@ impl Commands {
         }
     }
 
-    pub async fn handle_set_command(&self, db: Arc<RwLock<DB>>) {
-        let mut db = db.write().await;
-        db.set(self.args[0].clone(), self.args[1].clone());
+    pub async fn handle_set_command(&self, db: Arc<RwLock<DB>>) -> Result<String, Error> {
+        if self.args.len() == 2 {
+            let mut db = db.write().await;
+            db.set(self.args[0].clone(), self.args[1].clone(), None);
+        } else if self.args.len() == 4 {
+            let mut db = db.write().await;
+            match self.args[2].to_lowercase().as_str() {
+                "EX" => {}
+                _ => return Err(Error),
+            }
+            let ex = self.args[3].parse::<i64>();
+            if let Err(_) = ex {
+                return Err(Error);
+            }
+            db.set(
+                self.args[0].clone(),
+                self.args[1].clone(),
+                Some(std::time::Duration::from_secs(ex.unwrap() as u64)),
+            );
+        } else {
+            return Err(Error);
+        }
+        Ok("OK".to_string())
     }
 
     pub async fn handle_del_command(&self, db: Arc<RwLock<DB>>) {
@@ -65,7 +85,6 @@ impl Commands {
     pub async fn handle_flushall_command(&self, db: Arc<RwLock<DB>>) {
         let mut db = db.write().await;
         db.flushall();
-
     }
 
     pub async fn handle_incr_command(&self, db: Arc<RwLock<DB>>) -> Result<i32, Error> {
@@ -74,7 +93,7 @@ impl Commands {
         let value_str = match db.get(key) {
             Some(value) => value.clone(),
             None => {
-                db.set(key.clone(), "0".to_string());
+                db.set(key.clone(), "0".to_string(), None);
                 "0".to_string()
             }
         };
@@ -82,7 +101,7 @@ impl Commands {
         let value = value_str.parse::<i32>();
 
         if let Ok(v) = value {
-            db.set(key.clone(), (v + 1).to_string());
+            db.set(key.clone(), (v + 1).to_string(), None);
             Ok(v + 1)
         } else {
             Err(Error)
@@ -94,7 +113,7 @@ impl Commands {
         let value_str = match db.get(key) {
             Some(value) => value.clone(),
             None => {
-                db.set(key.clone(), "0".to_string());
+                db.set(key.clone(), "0".to_string(), None);
                 "0".to_string()
             }
         };
@@ -102,11 +121,10 @@ impl Commands {
         let value = value_str.parse::<i32>();
 
         if let Ok(v) = value {
-            db.set(key.clone(), (v - 1).to_string());
+            db.set(key.clone(), (v - 1).to_string(), None);
             Ok(v - 1)
         } else {
             Err(Error)
         }
     }
-
 }

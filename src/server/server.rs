@@ -65,8 +65,21 @@ async fn handle_process(mut stream: TcpStream, db: Arc<RwLock<DB>>) {
             }
             "set" => {
                 if let Some(args) = parse_arguments(&buffer, length_till, command_till, n) {
+                    if args.len() < 2 {
+                        send_argument_error(&mut stream, "set").await;
+                        continue;
+                    }
                     let cmd = Commands::new(command, args);
-                    cmd.handle_set_command(db.clone()).await;
+                    match cmd.handle_set_command(db.clone()).await {
+                        Ok(_) => {}
+                        Err(_) => {
+                            stream
+                                .write_all("-ERR syntax error\r\n".as_bytes())
+                                .await
+                                .unwrap();
+                            continue;
+                        }
+                    }
                     stream.write_all("+OK\r\n".as_bytes()).await.unwrap();
                 } else {
                     send_argument_error(&mut stream, "set").await;
